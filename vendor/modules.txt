@@ -1,0 +1,22 @@
+# github.com/btcsuite/btcd/btcec/v2 v2.3.2
+## explicit; go 1.17
+github.com/btcsuite/btcd/btcec/v2
+github.com/btcsuite/btcd/btcec/v2/schnorr
+# github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
+## explicit; go 1.17
+github.com/btcsuite/btcd/chaincfg/chainhash
+# github.com/decred/dcrd/crypto/blake256 v1.0.1
+## explicit; go 1.17
+github.com/decred/dcrd/crypto/blake256
+# github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
+## explicit; go 1.17
+github.com/decred/dcrd/dcrec/secp256k1/v4
+github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr
+# github.com/ekzyis/snappy v0.12.0
+## explicit; go 1.21
+github.com/ekzyis/snappy
+github.com/ekzyis/snappy/client
+github.com/ekzyis/snappy/types
+# gopkg.in/guregu/null.v4 v4.0.0
+## explicit
+gopkg.in/guregu/null.v4
