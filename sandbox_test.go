@@ -16,13 +16,13 @@ func newTestSandbox(t *testing.T) *Sandbox {
 	if _, err := exec.LookPath("bwrap"); err != nil {
 		t.Skip("bwrap not available (e.g. inside the Nix build sandbox); skipping integration test")
 	}
-	tools, err := defaultTools()
-	if err != nil {
-		t.Skipf("no sandbox tools on host: %v", err)
+	tools := os.Getenv("SANDBOX_TOOLS")
+	if tools == "" {
+		t.Skip("SANDBOX_TOOLS not set; skipping sandbox integration test")
 	}
 	seedTestRoot(t)
 	return &Sandbox{
-		SandboxRoot:    testRoot,
+		Root:           testRoot,
 		Tools:          tools,
 		Timeout:        5 * time.Second,
 		MaxOutputBytes: 4000,

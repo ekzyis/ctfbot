@@ -3,9 +3,10 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"os"
-	"strconv"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -22,6 +23,11 @@ func main() {
 
 	challenge := flag.String("challenge", "", "challenge filesystem root, mounted read-only in the sandbox")
 	rootItemId := flag.Int("item", 0, "Stacker News item whose replies the bot answers")
+	snBaseUrl := flag.String("sn-base-url", "https://stacker.news", "Stacker News API base URL")
+	pollInterval := flag.Duration("poll-interval", 5*time.Second, "how often to poll for new replies")
+	sandboxTimeout := flag.Duration("sandbox-timeout", 5*time.Second, "max wall-clock time per sandboxed command")
+	sandboxMaxOutput := flag.Int("sandbox-max-output", 4000, "max bytes of command output before truncation")
+	flag.Usage = usage
 	flag.Parse()
 
 	if *rootItemId <= 0 {
@@ -32,18 +38,36 @@ func main() {
 		flag.Usage()
 		log.Fatalf("-challenge <dir> is required: the read-only challenge filesystem root")
 	}
+	// The auth key is a secret, so it stays in the environment (or .env)
+	// rather than a CLI flag that would show up in the process list.
+	nsec := os.Getenv("SN_NSEC")
+	if nsec == "" {
+		flag.Usage()
+		log.Fatalf("SN_NSEC is required: the Stacker News auth key (set it in the environment or .env)")
+	}
+	tools := os.Getenv("SANDBOX_TOOLS")
+	if tools == "" {
+		flag.Usage()
+		log.Fatalf("SANDBOX_TOOLS is required: a directory whose bin/ holds the commands available in the sandbox")
+	}
 
-	sandbox, err := NewSandbox(*challenge)
+	// Fail fast if the runtime environment is missing tools the bot and its
+	// challenges rely on.
+	if missing := missingCommands("bwrap", "git", "grep", "base64", "pdfinfo"); len(missing) > 0 {
+		log.Fatalf("required commands not found on PATH: %s", strings.Join(missing, ", "))
+	}
+
+	sandbox, err := NewSandbox(*challenge, tools, *sandboxTimeout, *sandboxMaxOutput)
 	if err != nil {
 		log.Fatalf("sandbox init failed: %v", err)
 	}
 	log.Printf(
 		"sandbox ready: bwrap=%s root=%s tools=%s timeout=%s max_output=%d",
-		sandbox.Bwrap, sandbox.SandboxRoot, sandbox.Tools, sandbox.Timeout, sandbox.MaxOutputBytes)
+		sandbox.Bwrap, sandbox.Root, sandbox.Tools, sandbox.Timeout, sandbox.MaxOutputBytes)
 
 	c := sn.NewClient(
-		sn.WithBaseUrl(os.Getenv("SN_BASE_URL")),
-		sn.WithNsec(os.Getenv("SN_NSEC")),
+		sn.WithBaseUrl(*snBaseUrl),
+		sn.WithNsec(nsec),
 	)
 
 	me, err := c.Me()
@@ -53,10 +77,68 @@ func main() {
 	log.Printf("logged in as @%s", me.Name)
 	log.Printf("watching replies to item #%d", *rootItemId)
 
-	interval := durEnv("POLL_INTERVAL", 5 * time.Second)
-
-	for cmd := range streamCommands(c, interval, *rootItemId) {
+	for cmd := range streamCommands(c, *pollInterval, *rootItemId) {
 		handleCommand(c, sandbox, cmd)
+	}
+}
+
+// banner is `figlet -f smslant ctfbot`.
+const banner = `      __  _____        __
+ ____/ /_/ _/ /  ___  / /_
+/ __/ __/ _/ _ \/ _ \/ __/
+\__/\__/_//_.__/\___/\__/ `
+
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintln(out, banner)
+	fmt.Fprintln(out, "\nA Stacker News CTF bot.")
+	fmt.Fprintf(out, "\nUsage:\n  SN_NSEC=<nsec> %s -item <id> -challenge <dir>\n", os.Args[0])
+	fmt.Fprintln(out, "\nOptions:")
+	flag.PrintDefaults()
+	fmt.Fprintln(out, "\nEnvironment:")
+	fmt.Fprintf(out, "  %-14s %s\n", "SN_NSEC", "Stacker News auth key / nostr nsec (required; may be set in .env)")
+	fmt.Fprintf(out, "  %-14s %s\n", "SANDBOX_TOOLS", "dir whose bin/ holds the commands available in the sandbox (required)")
+}
+
+// missingCommands returns which of the given commands are not found on PATH.
+func missingCommands(cmds ...string) []string {
+	var missing []string
+	for _, c := range cmds {
+		if _, err := exec.LookPath(c); err != nil {
+			missing = append(missing, c)
+		}
+	}
+	return missing
+}
+
+// loadEnv loads KEY=VALUE lines from a .env file (if present) into the process
+// environment. It is how the SN_NSEC secret is provided without putting it on
+// the command line.
+func loadEnv() {
+	f, err := os.Open(".env")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		log.Fatalf("error opening .env: %v", err)
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	s.Split(bufio.ScanLines)
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			log.Fatalf(".env: invalid line: %s", line)
+		}
+		os.Setenv(parts[0], parts[1])
+	}
+	if err := s.Err(); err != nil {
+		log.Println("error scanning .env:", err)
 	}
 }
 
@@ -183,48 +265,3 @@ func waitUntilNext(d time.Duration) {
 	time.Sleep(dur)
 }
 
-func intEnv(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
-
-func durEnv(key string, def time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return def
-}
-
-func loadEnv() {
-	f, err := os.Open(".env")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return
-		}
-		log.Fatalf("error opening .env: %v", err)
-	}
-	defer f.Close()
-
-	s := bufio.NewScanner(f)
-	s.Split(bufio.ScanLines)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			log.Fatalf(".env: invalid line: %s", line)
-		}
-		os.Setenv(parts[0], parts[1])
-	}
-	if err := s.Err(); err != nil {
-		log.Println("error scanning .env:", err)
-	}
-}

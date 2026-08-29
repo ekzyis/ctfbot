@@ -42,3 +42,15 @@ func TestFormatOutputEscapesFence(t *testing.T) {
 		t.Fatalf("expected 3-backtick fence for plain output, got:\n%s", plain)
 	}
 }
+
+func TestMissingCommands(t *testing.T) {
+	const bogus = "definitely-not-a-real-command-xyz"
+	if got := missingCommands(bogus); len(got) != 1 || got[0] != bogus {
+		t.Errorf("missingCommands(%q) = %v, want [%q]", bogus, got, bogus)
+	}
+	// A command that is present must not be reported. sh is on PATH in any
+	// POSIX environment the tests run in; if not, skip rather than fail.
+	if got := missingCommands("sh"); len(got) != 0 {
+		t.Skipf("sh not on PATH here (%v); skipping present-command check", got)
+	}
+}

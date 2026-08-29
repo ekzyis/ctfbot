@@ -8,25 +8,30 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # The set of commands available to players on PATH inside the sandbox.
-      # Add or remove packages here to change what the CTF box "has installed".
+      # Packages that make up the runtime environment: they go on the bot's
+      # PATH (so its startup command checks pass) and are bundled into
+      # SANDBOX_TOOLS, the read-only command set mounted into the sandbox.
+      runtimeTools = with pkgs; [
+        bashInteractive
+        coreutils
+        gnugrep
+        gnused
+        gawk
+        findutils
+        less
+        file
+        gzip
+        diffutils
+        which
+        git
+        vim # for `view`-style read-only poking; harmless in a ro fs
+        pkgs."poppler-utils" # pdfinfo, pdftotext, ...
+      ];
+
+      # The command set mounted read-only into the sandbox (SANDBOX_TOOLS).
       sandboxTools = pkgs.buildEnv {
         name = "ctfbot-tools";
-        paths = with pkgs; [
-          bashInteractive
-          coreutils
-          gnugrep
-          gnused
-          gawk
-          findutils
-          less
-          file
-          gzip
-          diffutils
-          which
-          vim # for `view`-style read-only poking; harmless in a ro fs
-          pkgs."poppler-utils" # pdfinfo
-        ];
+        paths = runtimeTools;
       };
     in
     {
@@ -44,12 +49,12 @@
 
         nativeBuildInputs = [ pkgs.makeWrapper ];
 
-        # bwrap must be on PATH at runtime; SANDBOX_TOOLS points the bot at the
-        # curated command set above.
+        # bwrap plus the curated command set go on PATH (the bot checks for a
+        # few at startup); SANDBOX_TOOLS is the read-only tool dir it mounts.
         postInstall = ''
           wrapProgram $out/bin/ctfbot \
-            --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.bubblewrap ]} \
-            --set-default SANDBOX_TOOLS ${sandboxTools}
+            --prefix PATH : ${pkgs.lib.makeBinPath ([ pkgs.bubblewrap ] ++ runtimeTools)} \
+            --set SANDBOX_TOOLS ${sandboxTools}
         '';
 
         meta.description = "Stacker News bot for shell CTFs";
@@ -61,12 +66,13 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ go gopls bubblewrap ];
-        # So `go run .` / `go test` use the same curated tool set as production.
+        # The same tools as production on PATH, plus SANDBOX_TOOLS set, so
+        # `go run .` / `go test` see the identical runtime environment.
+        packages = with pkgs; [ go gopls bubblewrap ] ++ runtimeTools;
         SANDBOX_TOOLS = sandboxTools;
         shellHook = ''
           echo "ctfbot dev shell. SANDBOX_TOOLS=$SANDBOX_TOOLS"
-          echo "bwrap: $(command -v bwrap)"
+          echo "bwrap=$(command -v bwrap) git=$(command -v git) pdfinfo=$(command -v pdfinfo)"
         '';
       };
     };

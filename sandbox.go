@@ -7,20 +7,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 type Sandbox struct {
 	Bwrap          string
-	SandboxRoot    string
+	Root           string
 	Tools          string
 	Timeout        time.Duration
 	MaxOutputBytes int
 }
 
-func NewSandbox(root string) (*Sandbox, error) {
+func NewSandbox(root, tools string, timeout time.Duration, maxOutput int) (*Sandbox, error) {
 	bwrap, err := exec.LookPath("bwrap")
 	if err != nil {
 		return nil, fmt.Errorf("bwrap not found on PATH: %w", err)
@@ -30,23 +29,16 @@ func NewSandbox(root string) (*Sandbox, error) {
 		return nil, fmt.Errorf("challenge root %q is not a directory: %v", root, err)
 	}
 
-	tools := os.Getenv("SANDBOX_TOOLS")
-	if tools == "" {
-		var err error
-		if tools, err = defaultTools(); err != nil {
-			return nil, err
-		}
-	}
 	if fi, err := os.Stat(tools + "/bin"); err != nil || !fi.IsDir() {
 		return nil, fmt.Errorf("SANDBOX_TOOLS %q has no bin/ dir: %v", tools, err)
 	}
 
 	return &Sandbox{
 		Bwrap:          bwrap,
-		SandboxRoot:    root,
+		Root:           root,
 		Tools:          tools,
-		Timeout:        durEnv("SANDBOX_TIMEOUT", 5*time.Second),
-		MaxOutputBytes: intEnv("SANDBOX_MAX_OUTPUT", 4000),
+		Timeout:        timeout,
+		MaxOutputBytes: maxOutput,
 	}, nil
 }
 
@@ -63,7 +55,7 @@ func (s *Sandbox) Run(cmd string) (output string, truncated bool) {
 	args := []string{
 		"--ro-bind", "/nix/store", "/nix/store",
 		"--ro-bind", s.Tools, "/run",
-		"--ro-bind", s.SandboxRoot, "/home/ctfbot",
+		"--ro-bind", s.Root, "/home/ctfbot",
 		"--symlink", "/run/bin/sh", "/bin/sh",
 		"--symlink", "/run/bin/env", "/usr/bin/env",
 		"--tmpfs", "/tmp",
@@ -128,41 +120,6 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
-}
-
-func defaultTools() (string, error) {
-	dir, err := os.MkdirTemp("", "ppc-tools-")
-	if err != nil {
-		return "", err
-	}
-	bin := dir + "/bin"
-	if err := os.Mkdir(bin, 0o755); err != nil {
-		return "", err
-	}
-	needed := []string{
-		"sh", "bash", "env", "ls", "cat", "echo", "grep", "find", "head",
-		"tail", "wc", "sort", "uniq", "cut", "tr", "sed", "awk", "base64",
-		"xxd", "file", "strings", "pwd", "whoami", "id", "date", "uname",
-		"sleep", "yes", "seq", "printf", "stat", "readlink", "basename",
-		"dirname", "md5sum", "sha256sum", "tac", "rev", "nl", "du", "tee",
-	}
-	found := 0
-	for _, name := range needed {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			continue
-		}
-		if real, err := filepath.EvalSymlinks(path); err == nil {
-			path = real
-		}
-		if err := os.Symlink(path, bin+"/"+name); err == nil {
-			found++
-		}
-	}
-	if found == 0 {
-		return "", fmt.Errorf("no sandbox tools found on host PATH")
-	}
-	return dir, nil
 }
 
 var _ io.Writer = (*limitedWriter)(nil)
