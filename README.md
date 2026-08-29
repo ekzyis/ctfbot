@@ -1,4 +1,4 @@
-# [@ctfbot](https://stacker.news/ctfbot_)
+# [@ctfbot_](https://stacker.news/ctfbot_)
 
 [Stacker News](https://stacker.news) CTF bot.
 
