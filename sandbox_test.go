@@ -72,6 +72,17 @@ func TestSandboxReadOnly(t *testing.T) {
 	}
 }
 
+func TestSandboxReadOnlyReportsError(t *testing.T) {
+	s := newTestSandbox(t)
+	out, _ := s.Run("rm -rf hello.txt")
+	if !strings.Contains(out, "Read-only file system") {
+		t.Fatalf("expected a read-only error from `rm -rf`, got:\n%s", out)
+	}
+	if survived, _ := s.Run("ls hello.txt"); !strings.Contains(survived, "hello.txt") {
+		t.Fatalf("hello.txt should survive `rm -rf`, got:\n%s", survived)
+	}
+}
+
 func TestSandboxTmpWritable(t *testing.T) {
 	s := newTestSandbox(t)
 	out, _ := s.Run("echo hi > /tmp/x && cat /tmp/x")
