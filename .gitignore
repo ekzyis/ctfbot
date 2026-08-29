@@ -1,4 +1,6 @@
 /.env
 /ctfbot
+/leet
 result
+/challenge/test
 /challenge-*
