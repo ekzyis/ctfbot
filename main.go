@@ -202,9 +202,9 @@ func parseCommand(text string) (string, bool) {
 func handleCommand(c *sn.Client, sandbox *Sandbox, cmd Command) {
 	log.Printf("running command from reply #%d by @%s: %q", cmd.Reply.Id, cmd.Reply.User.Name, oneLine(cmd.Cmd))
 
-	output, truncated := sandbox.Run(cmd.Cmd)
+	output := sandbox.Run(cmd.Cmd)
 
-	cId, err := c.CreateComment(cmd.Reply.Id, formatOutput(output, truncated))
+	cId, err := c.CreateComment(cmd.Reply.Id, formatOutput(output))
 	if err != nil {
 		log.Printf("failed to post output for reply #%d: %v", cmd.Reply.Id, err)
 		return
@@ -212,7 +212,7 @@ func handleCommand(c *sn.Client, sandbox *Sandbox, cmd Command) {
 	log.Printf("posted output comment #%d for reply #%d", cId, cmd.Reply.Id)
 }
 
-func formatOutput(output string, truncated bool) string {
+func formatOutput(output string) string {
 	// Use a fence longer than any run of backticks in the output so the
 	// content can't break out of the code block (CommonMark closing-fence rule),
 	// but never shorter than the standard 3.
@@ -227,9 +227,6 @@ func formatOutput(output string, truncated bool) string {
 	b.WriteString("\n")
 	b.WriteString(strings.TrimRight(output, "\n"))
 	b.WriteString("\n")
-	if truncated {
-		b.WriteString("... (output truncated)\n")
-	}
 	b.WriteString(fence)
 	return b.String()
 }

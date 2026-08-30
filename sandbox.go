@@ -42,9 +42,9 @@ func NewSandbox(root, tools string, timeout time.Duration, maxOutput int) (*Sand
 	}, nil
 }
 
-func (s *Sandbox) Run(cmd string) (output string, truncated bool) {
+func (s *Sandbox) Run(cmd string) (output string) {
 	if strings.TrimSpace(cmd) == "" {
-		return "(no command)", false
+		return "(no command)"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
@@ -78,19 +78,14 @@ func (s *Sandbox) Run(cmd string) (output string, truncated bool) {
 		bwrap = "bwrap"
 	}
 	c := exec.CommandContext(ctx, bwrap, args...)
-	var buf bytes.Buffer
-	lw := &limitedWriter{buf: &buf, limit: s.MaxOutputBytes + 1}
+	lw := &limitedWriter{limit: s.MaxOutputBytes}
 	c.Stdout = lw
 	c.Stderr = lw
 	c.Stdin = bytes.NewReader(nil)
 
 	err := c.Run()
 
-	out := buf.String()
-	if len(out) > s.MaxOutputBytes {
-		out = out[:s.MaxOutputBytes]
-		truncated = true
-	}
+	out := lw.String()
 
 	if ctx.Err() == context.DeadlineExceeded {
 		out = strings.TrimRight(out, "\n")
@@ -98,17 +93,18 @@ func (s *Sandbox) Run(cmd string) (output string, truncated bool) {
 			out += "\n"
 		}
 		out += fmt.Sprintf("(timed out after %s)", s.Timeout)
-		return out, truncated
+		return out
 	}
 	if err != nil && out == "" {
 		out = fmt.Sprintf("(command exited with error: %v)", err)
 	}
-	return out, truncated
+	return out
 }
 
 type limitedWriter struct {
-	buf   *bytes.Buffer
+	buf   bytes.Buffer
 	limit int
+	seen  int
 }
 
 func (w *limitedWriter) Write(p []byte) (int, error) {
@@ -119,7 +115,15 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 			w.buf.Write(p)
 		}
 	}
+	w.seen += len(p)
 	return len(p), nil
+}
+
+func (w *limitedWriter) String() string {
+	if left := w.seen - w.buf.Len(); left > 0 {
+		return w.buf.String() + fmt.Sprintf("\n[truncated with %d bytes left]", left)
+	}
+	return w.buf.String()
 }
 
 var _ io.Writer = (*limitedWriter)(nil)

@@ -47,7 +47,7 @@ func seedTestRoot(t *testing.T) {
 
 func TestSandboxListsChallenge(t *testing.T) {
 	s := newTestSandbox(t)
-	out, _ := s.Run("ls")
+	out := s.Run("ls")
 	if !strings.Contains(out, "hello.txt") {
 		t.Fatalf("expected hello.txt in `ls`, got:\n%s", out)
 	}
@@ -55,10 +55,10 @@ func TestSandboxListsChallenge(t *testing.T) {
 
 func TestSandboxHiddenFileChain(t *testing.T) {
 	s := newTestSandbox(t)
-	if out, _ := s.Run("ls -a"); !strings.Contains(out, ".secret") {
+	if out := s.Run("ls -a"); !strings.Contains(out, ".secret") {
 		t.Fatalf("expected .secret in `ls -a`, got:\n%s", out)
 	}
-	out, _ := s.Run("cat .secret | head -n1")
+	out := s.Run("cat .secret | head -n1")
 	if !strings.Contains(out, "hidden treasure") {
 		t.Fatalf("expected hidden file contents, got:\n%s", out)
 	}
@@ -66,7 +66,7 @@ func TestSandboxHiddenFileChain(t *testing.T) {
 
 func TestSandboxReadOnly(t *testing.T) {
 	s := newTestSandbox(t)
-	out, _ := s.Run("rm hello.txt 2>&1; echo done; ls hello.txt")
+	out := s.Run("rm hello.txt 2>&1; echo done; ls hello.txt")
 	if !strings.Contains(out, "hello.txt") {
 		t.Fatalf("hello.txt should survive a rm attempt, got:\n%s", out)
 	}
@@ -74,18 +74,18 @@ func TestSandboxReadOnly(t *testing.T) {
 
 func TestSandboxReadOnlyReportsError(t *testing.T) {
 	s := newTestSandbox(t)
-	out, _ := s.Run("rm -rf hello.txt")
+	out := s.Run("rm -rf hello.txt")
 	if !strings.Contains(out, "Read-only file system") {
 		t.Fatalf("expected a read-only error from `rm -rf`, got:\n%s", out)
 	}
-	if survived, _ := s.Run("ls hello.txt"); !strings.Contains(survived, "hello.txt") {
+	if survived := s.Run("ls hello.txt"); !strings.Contains(survived, "hello.txt") {
 		t.Fatalf("hello.txt should survive `rm -rf`, got:\n%s", survived)
 	}
 }
 
 func TestSandboxTmpWritable(t *testing.T) {
 	s := newTestSandbox(t)
-	out, _ := s.Run("echo hi > /tmp/x && cat /tmp/x")
+	out := s.Run("echo hi > /tmp/x && cat /tmp/x")
 	if !strings.Contains(out, "hi") {
 		t.Fatalf("/tmp should be writable, got:\n%s", out)
 	}
@@ -93,7 +93,7 @@ func TestSandboxTmpWritable(t *testing.T) {
 
 func TestSandboxNoNetwork(t *testing.T) {
 	s := newTestSandbox(t)
-	out, _ := s.Run("cat /proc/net/dev")
+	out := s.Run("cat /proc/net/dev")
 	if !strings.Contains(out, "lo:") {
 		t.Fatalf("expected loopback in /proc/net/dev, got:\n%s", out)
 	}
@@ -108,7 +108,7 @@ func TestSandboxTimeout(t *testing.T) {
 	s := newTestSandbox(t)
 	s.Timeout = 1 * time.Second
 	start := time.Now()
-	out, _ := s.Run("sleep 10")
+	out := s.Run("sleep 10")
 	if elapsed := time.Since(start); elapsed > 4*time.Second {
 		t.Fatalf("timeout not enforced, took %s", elapsed)
 	}
@@ -120,11 +120,16 @@ func TestSandboxTimeout(t *testing.T) {
 func TestSandboxOutputCap(t *testing.T) {
 	s := newTestSandbox(t)
 	s.MaxOutputBytes = 100
-	out, truncated := s.Run("yes ABCDEFGH | head -n 1000")
-	if !truncated {
-		t.Fatalf("expected truncation")
+	out := s.Run("yes ABCDEFGH | head -n 1000")
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	last := lines[len(lines)-1]
+	if last != "[truncated with 8900 bytes left]" {
+		t.Fatalf("unexpected truncation notice in last line, got: %q", last)
 	}
-	if len(out) > 100 {
-		t.Fatalf("output not capped: %d bytes", len(out))
+
+	capped := strings.TrimSuffix(strings.TrimRight(out, "\n"), last)
+	if got := len(strings.TrimRight(capped, "\n")); got != 100 {
+		t.Fatalf("output not capped at 100 bytes: got %d", got)
 	}
 }

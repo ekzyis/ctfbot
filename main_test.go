@@ -31,13 +31,13 @@ func TestParseCommand(t *testing.T) {
 
 func TestFormatOutputEscapesFence(t *testing.T) {
 	// Output containing a triple-backtick run must be wrapped in a longer fence.
-	out := formatOutput("before ``` after", false)
+	out := formatOutput("before ``` after")
 	if !strings.HasPrefix(out, "````\n") || !strings.HasSuffix(out, "\n````") {
 		t.Fatalf("expected 4-backtick fence around ``` output, got:\n%s", out)
 	}
 
 	// Plain output still uses the standard 3-backtick fence.
-	plain := formatOutput("hello", false)
+	plain := formatOutput("hello")
 	if !strings.HasPrefix(plain, "```\n") || !strings.HasSuffix(plain, "\n```") {
 		t.Fatalf("expected 3-backtick fence for plain output, got:\n%s", plain)
 	}
