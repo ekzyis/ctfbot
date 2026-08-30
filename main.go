@@ -26,7 +26,7 @@ func main() {
 	snBaseUrl := flag.String("sn-base-url", "https://stacker.news", "Stacker News API base URL")
 	pollInterval := flag.Duration("poll-interval", 5*time.Second, "how often to poll for new replies")
 	sandboxTimeout := flag.Duration("sandbox-timeout", 5*time.Second, "max wall-clock time per sandboxed command")
-	sandboxMaxOutput := flag.Int("sandbox-max-output", 4000, "max bytes of command output before truncation")
+	sandboxMaxOutput := flag.Int("sandbox-max-output", 2000, "max bytes of command output before truncation")
 	flag.Usage = usage
 	flag.Parse()
 

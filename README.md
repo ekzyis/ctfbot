@@ -63,7 +63,7 @@ The bot checks on startup if the commands necessary to solve the challenges are 
 | `-sn-base-url`        | `https://stacker.news`| Stacker News API base URL                                      |
 | `-poll-interval`      | `5s`                  | how often to poll for new replies                              |
 | `-sandbox-timeout`    | `5s`                  | max wall-clock time per sandboxed command                      |
-| `-sandbox-max-output` | `4000`                | max bytes of command output before truncation                  |
+| `-sandbox-max-output` | `2000`                | max bytes of command output before truncation                  |
 
 | env var         | default      | purpose                                                       |
 |-----------------|--------------|---------------------------------------------------------------|
