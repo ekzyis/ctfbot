@@ -50,9 +50,15 @@ func (s *Sandbox) Run(cmd string) (output string) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
 	defer cancel()
 
+	// apply resource limits:
+	//  -t: maximum amount of cpu time in seconds
+	//  -v: size of virtual memory
+	//  -f: maximum size of files written
+	//  -u: maximum number of user processes
 	script := "ulimit -t 10 -v 524288 -f 4096 -u 128 2>/dev/null; " + cmd
 
 	args := []string{
+		// TODO: https://github.com/ekzyis/ctfbot/issues/2
 		"--ro-bind", "/nix/store", "/nix/store",
 		"--ro-bind", s.Tools, "/run",
 		"--ro-bind", s.Root, "/home/ctfbot",
@@ -62,7 +68,8 @@ func (s *Sandbox) Run(cmd string) (output string) {
 		"--proc", "/proc",
 		"--dev", "/dev",
 		"--chdir", "/home/ctfbot",
-		"--clearenv", // very important to not leak SN_NSEC
+		// very important to not leak SN_NSEC
+		"--clearenv",
 		"--setenv", "PATH", "/run/bin",
 		"--setenv", "HOME", "/home/ctfbot",
 		"--setenv", "TERM", "xterm",
